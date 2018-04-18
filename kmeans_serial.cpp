@@ -1,331 +1,234 @@
-//Author : Shailesh Tripathi
+//Author: Shailesh Tripathi
 
-#include <vector>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
-#include <algorithm>
+#include<bits/stdc++.h>
 
 using namespace std;
 
 class Point
 {
-private:
-	int id_point, id_cluster;
-	vector<double> values;
-	int total_values;
-	string name;
+	public:
+		int id_point, id_cluster;
+	    vector<double> values;
+   		int dimension;
+		
+	Point(int id_point, vector<double>& values)
+    {
+        this->id_point = id_point;
+        dimension = values.size();
 
-public:
-	Point(int id_point, vector<double>& values, string name = "")
-	{
-		this->id_point = id_point;
-		total_values = values.size();
+        for(int i = 0; i < dimension; i++)
+            this->values.push_back(values[i]);
 
-		for(int i = 0; i < total_values; i++)
-			this->values.push_back(values[i]);
-
-		this->name = name;
-		id_cluster = -1;
-	}
-
-	int getID()
-	{
-		return id_point;
-	}
-
-	void setCluster(int id_cluster)
-	{
-		this->id_cluster = id_cluster;
-	}
-
-	int getCluster()
-	{
-		return id_cluster;
-	}
-
-	double getValue(int index)
-	{
-		return values[index];
-	}
-
-	int getTotalValues()
-	{
-		return total_values;
-	}
-
-	void addValue(double value)
-	{
-		values.push_back(value);
-	}
-
-	string getName()
-	{
-		return name;
-	}
+        id_cluster = -1;
+    }
+	
 };
 
-class Cluster
+class Data_tree
 {
-private:
-	int id_cluster;
-	vector<double> central_values;
-	vector<Point> points;
-
-public:
-	Cluster(int id_cluster, Point point)
-	{
-		this->id_cluster = id_cluster;
-
-		int total_values = point.getTotalValues();
-
-		for(int i = 0; i < total_values; i++)
-			central_values.push_back(point.getValue(i));
-
-		points.push_back(point);
-	}
-
-	void addPoint(Point point)
-	{
-		points.push_back(point);
-	}
-
-	bool removePoint(int id_point)
-	{
-		int total_points = points.size();
-
-		for(int i = 0; i < total_points; i++)
+	public:
+		Data_tree *left, *right;
+		vector<Point> points;
+		vector<double> min_C, max_C;
+		
+		Data_tree(vector<Point> P)
 		{
-			if(points[i].getID() == id_point)
+			points = P;
+			left=NULL;
+			right=NULL;
+			int i,j;
+			if(P.size() != 0)
 			{
-				points.erase(points.begin() + i);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	double getCentralValue(int index)
-	{
-		return central_values[index];
-	}
-
-	void setCentralValue(int index, double value)
-	{
-		central_values[index] = value;
-	}
-
-	Point getPoint(int index)
-	{
-		return points[index];
-	}
-
-	int getTotalPoints()
-	{
-		return points.size();
-	}
-
-	int getID()
-	{
-		return id_cluster;
-	}
-};
-
-class KMeans
-{
-private:
-	int K; // number of clusters
-	int total_values, total_points, max_iterations;
-	vector<Cluster> clusters;
-
-	// return ID of nearest center (uses euclidean distance)
-	int getIDNearestCenter(Point point)
-	{
-		double sum = 0.0, min_dist;
-		int id_cluster_center = 0;
-
-		for(int i = 0; i < total_values; i++)
-		{
-			sum += pow(clusters[0].getCentralValue(i) -
-					   point.getValue(i), 2.0);
-		}
-
-		min_dist = sqrt(sum);
-
-		for(int i = 1; i < K; i++)
-		{
-			double dist;
-			sum = 0.0;
-
-			for(int j = 0; j < total_values; j++)
-			{
-				sum += pow(clusters[i].getCentralValue(j) -
-						   point.getValue(j), 2.0);
-			}
-
-			dist = sqrt(sum);
-
-			if(dist < min_dist)
-			{
-				min_dist = dist;
-				id_cluster_center = i;
-			}
-		}
-
-		return id_cluster_center;
-	}
-
-public:
-	KMeans(int K, int total_points, int total_values, int max_iterations)
-	{
-		this->K = K;
-		this->total_points = total_points;
-		this->total_values = total_values;
-		this->max_iterations = max_iterations;
-	}
-
-	void run(vector<Point> & points)
-	{
-		if(K > total_points)
-			return;
-
-		vector<int> prohibited_indexes;
-
-		// choose K distinct values for the centers of the clusters
-		for(int i = 0; i < K; i++)
-		{
-			while(true)
-			{
-				int index_point = rand() % total_points;
-
-				if(find(prohibited_indexes.begin(), prohibited_indexes.end(),
-						index_point) == prohibited_indexes.end())
+				
+				for(i = 0 ; i<P[0].dimension ; i++)
 				{
-					prohibited_indexes.push_back(index_point);
-					points[index_point].setCluster(i);
-					Cluster cluster(i, points[index_point]);
-					clusters.push_back(cluster);
-					break;
+					min_C.push_back(DBL_MAX);
+					max_C.push_back(DBL_MIN);
 				}
-			}
-		}
 
-		int iter = 1;
-
-		while(true)
-		{
-			bool done = true;
-
-			// associates each point to the nearest center
-			for(int i = 0; i < total_points; i++)
-			{
-				int id_old_cluster = points[i].getCluster();
-				int id_nearest_center = getIDNearestCenter(points[i]);
-
-				if(id_old_cluster != id_nearest_center)
+				for(i = 0 ; i<P.size() ; i++)
 				{
-					if(id_old_cluster != -1)
-						clusters[id_old_cluster].removePoint(points[i].getID());
-
-					points[i].setCluster(id_nearest_center);
-					clusters[id_nearest_center].addPoint(points[i]);
-					done = false;
-				}
-			}
-
-			// recalculating the center of each cluster
-			for(int i = 0; i < K; i++)
-			{
-				for(int j = 0; j < total_values; j++)
-				{
-					int total_points_cluster = clusters[i].getTotalPoints();
-					double sum = 0.0;
-
-					if(total_points_cluster > 0)
+					for(j=0;j<P[i].dimension;j++)
 					{
-						for(int p = 0; p < total_points_cluster; p++)
-							sum += clusters[i].getPoint(p).getValue(j);
-						clusters[i].setCentralValue(j, sum / total_points_cluster);
+						min_C[j] = min(min_C[j], P[i].values[j]);
+						max_C[j] = max(max_C[j], P[i].values[j]);
 					}
 				}
-			}
 
-			if(done == true || iter >= max_iterations)
-			{
-				cout << "Break in iteration " << iter << "\n\n";
-				break;
 			}
-
-			iter++;
 		}
 
-		// shows elements of clusters
-		for(int i = 0; i < K; i++)
+		void display()
 		{
-			int total_points_cluster =  clusters[i].getTotalPoints();
-
-			cout << "Cluster " << clusters[i].getID() + 1 << endl;
-			for(int j = 0; j < total_points_cluster; j++)
-			{
-				cout << "Point " << clusters[i].getPoint(j).getID() + 1 << ": ";
-				for(int p = 0; p < total_values; p++)
-					cout << clusters[i].getPoint(j).getValue(p) << " ";
-
-				string point_name = clusters[i].getPoint(j).getName();
-
-				if(point_name != "")
-					cout << "- " << point_name;
-
-				cout << endl;
-			}
-
-			cout << "Cluster values: ";
-
-			for(int j = 0; j < total_values; j++)
-				cout << clusters[i].getCentralValue(j) << " ";
-
-			cout << "\n\n";
+			cout<<"size="<<points.size()<<endl;
 		}
-	}
+
 };
 
-int main(int argc, char *argv[])
+class Centroid
 {
-	srand (time(NULL));
-
-	int total_points, total_values, K, max_iterations, has_name;
-
-	cin >> total_points >> total_values >> K >> max_iterations >> has_name;
-
-	vector<Point> points;
-	string point_name;
-
-	for(int i = 0; i < total_points; i++)
-	{
+	public:
 		vector<double> values;
+		double center_sum;
+		int count;
+	
+//	Centroid(vector<double> C)
+//	{
+//		values = C;
+//		center_sum = 0;
+//		count = 0;
+//	}
 
-		for(int j = 0; j < total_values; j++)
-		{
-			double value;
-			cin >> value;
-			values.push_back(value);
-		}
+};
 
-		if(has_name)
-		{
-			cin >> point_name;
-			Point p(i, values, point_name);
-			points.push_back(p);
-		}
-		else
-		{
-			Point p(i, values);
-			points.push_back(p);
-		}
+void print(vector<Point> P, int total_attributes)
+{
+	int i,j;
+	for( i = 0 ; i < P.size() ; i++ )
+	{
+		for( j=0 ; j<total_attributes ; j++)
+			cout<<P[i].values[j]<<' ';
+		cout << endl;
 	}
-cout<<"go";
-	KMeans kmeans(K, total_points, total_values, max_iterations);
-	kmeans.run(points);
-
-	return 0;
 }
+
+double find_median(vector<Point> P, int dim)
+{
+	vector<double> M;
+	double median;
+
+	for(int i=0; i< P.size() ;i++)
+	{
+		M.push_back(P[i].values[dim]);
+	}
+	sort(M.begin(), M.end());
+	median = M[M.size()/2];
+
+	return median;
+}
+
+void make_tree(Data_tree **node, vector<Point> P, int dim, int total_attributes)
+{
+	if(P.size() == 0)
+		return;	
+
+	//print(P,total_attributes);	
+	//cout<<P.size()<<' '<<dim<<'\n';
+	*node = new Data_tree(P);
+	//(*node)->display();
+	if( P.size() == 1)
+		return;
+	double median = find_median(P, dim);
+	//cout<< "median = " << median<<endl;
+
+	vector<Point> L,R;
+	for(int i=0; i< P.size() ;i++)
+	{
+		if(P[i].values[dim] < median)
+			L.push_back(P[i]);
+		else
+			R.push_back(P[i]);
+	}
+	
+
+	make_tree(&((*node)->left), L, (dim+1)%total_attributes, total_attributes);
+	make_tree(&((*node)->right), R, (dim+1)%total_attributes, total_attributes);
+}
+
+void iterate_tree(Data_tree *node, int total_attributes)
+{
+	if( node == NULL ) 
+	{
+		cout<<endl;
+		return;
+	}
+	cout<<"min-max\n";	
+	for(int i=0;i<total_attributes;i++)
+	{
+		cout<<node->min_C[i] << ' '<<node->max_C[i]<<endl;
+	}
+
+	cout<<"enter\n";
+	for(int i=0; i< node->points.size() ;i++)
+	{
+		for(int j=0; j <total_attributes; j++)
+			cout<< node->points[i].values[j]<<' ';
+		cout<<endl;
+	}
+	iterate_tree(node->left, total_attributes);
+	iterate_tree(node->right, total_attributes);
+	
+	cout<<"exit\n";
+}
+
+//void prune(Data_tree *root,vector<Centroid>& C)
+//{
+	
+
+
+int main()
+{
+	int  total_points,		//total number of points
+		 total_attributes,  //dimension
+		 K,					//number of clusters
+		 max_iterations;	//maximum number of iterations
+
+	int i,j;
+	double value;
+	Data_tree *root = NULL;
+
+	cin >> total_points >> total_attributes >> K >> max_iterations;
+
+	vector<Point> P;
+	vector<double> values(total_attributes);
+
+	//input the data points
+	for(i = 0; i < total_points; i++)
+	{
+
+		for(j = 0; j < total_attributes; j++)
+		{
+			cin >> values[j];
+		}
+
+		Point p(i, values);
+		P.push_back(p);
+	}
+	
+	//build the data tree
+	make_tree(&root, P, 0, total_attributes);
+
+	//iterate over the tree and print it
+	iterate_tree(root, total_attributes);
+
+	
+	//select random initial centroids
+	vector<Centroid> C;
+	
+	//using test centers
+	Centroid temp;
+	vector<double> L(2);
+	L[0] = 2;
+	L[1] = 2;
+	
+	temp.values = L;
+	C.push_back(temp);
+		
+	L[0] = 4;
+	L[1] = 4;
+	
+	temp.values = L;
+	C.push_back(temp);
+
+	L[0] = 6;
+	L[1] = 7;
+	
+	temp.values = L;
+	C.push_back(temp);
+	//done intialization
+
+//	prune(root, C);	
+	
+
+}
+
