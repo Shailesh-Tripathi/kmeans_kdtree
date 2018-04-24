@@ -1,8 +1,20 @@
+// K-means clustering algorithm. Implementaion using kd-tree
 //Author: Shailesh Tripathi
 
 #include<bits/stdc++.h>
 
 using namespace std;
+
+//utility function to compute euclidean distance between two vectors
+double calc_dist(vector<double> A, vector<double> B)
+{
+	double res = 0;
+	for(int i=0;i<A.size();i++)
+		res += ((A[i]-B[i]) * (A[i]-B[i]));
+
+	res = sqrt(res);
+	return res;
+}
 
 class Point
 {
@@ -30,20 +42,26 @@ class Data_tree
 		Data_tree *left, *right;
 		vector<Point> points;
 		vector<double> min_C, max_C;
+		vector<double> mid_C,wgt_cent;
+		int num_points;
 		
+
 		Data_tree(vector<Point> P)
 		{
 			points = P;
 			left=NULL;
 			right=NULL;
+			num_points = P.size();
 			int i,j;
 			if(P.size() != 0)
 			{
-				
+			
+				//initialize min, max nad mid for each dimension	
 				for(i = 0 ; i<P[0].dimension ; i++)
 				{
 					min_C.push_back(DBL_MAX);
 					max_C.push_back(DBL_MIN);
+					mid_C.push_back(0);
 				}
 
 				for(i = 0 ; i<P.size() ; i++)
@@ -52,9 +70,15 @@ class Data_tree
 					{
 						min_C[j] = min(min_C[j], P[i].values[j]);
 						max_C[j] = max(max_C[j], P[i].values[j]);
+						mid_C[j] += P[i].values[j];
 					}
 				}
-
+				wgt_cent = mid_C;
+				for(i = 0 ; i<P[0].dimension ; i++)	
+				{
+					
+					mid_C[i] /= P.size();
+				} 
 			}
 		}
 
@@ -71,13 +95,14 @@ class Centroid
 		vector<double> values;
 		double center_sum;
 		int count;
-	
-//	Centroid(vector<double> C)
-//	{
+		int cent_id;
+		int dimension;
+	Centroid()
+	{
 //		values = C;
-//		center_sum = 0;
-//		count = 0;
-//	}
+		center_sum = 0;
+		count = 0;
+	}
 
 };
 
@@ -142,10 +167,10 @@ void iterate_tree(Data_tree *node, int total_attributes)
 		cout<<endl;
 		return;
 	}
-	cout<<"min-max\n";	
+	cout<<"min-max-mid\n";	
 	for(int i=0;i<total_attributes;i++)
 	{
-		cout<<node->min_C[i] << ' '<<node->max_C[i]<<endl;
+		cout<<node->min_C[i] << ' '<<node->max_C[i]<<' '<<node->mid_C[i]<<endl;
 	}
 
 	cout<<"enter\n";
@@ -161,9 +186,80 @@ void iterate_tree(Data_tree *node, int total_attributes)
 	cout<<"exit\n";
 }
 
-//void prune(Data_tree *root,vector<Centroid>& C)
-//{
+//returns true if z is farther than z* (z is a not potential center)
+bool isFarther(Data_tree *root, Centroid z, Centroid z_star)
+{
+	int dim = root->points[0].dimension;
+	int i;
+	vector<double> corner_point(dim);
 	
+	for(i=0;i<dim;i++)
+	{
+		if(z.values[i] > z_star.values[i] ) 
+			corner_point[i] = root->max_C[i];
+		else
+			corner_point[i] = root->min_C[i];
+	}
+	
+	return calc_dist(corner_point,z.values) > calc_dist(corner_point,z_star.values);
+
+}
+
+void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
+{
+	if (root == NULL)
+		return;
+	
+	//if node is a leaf
+	if(node->num_points == 1)
+	{
+		//add weights and centroid properties
+	
+	}
+	vector<int> pruned_id;
+	int i,j;
+
+	double dist,min_dist = DBL_MAX;
+	int min_id;
+	vector<double> corner(node->points.size());
+
+
+	//find z*
+	for(i =0; i < ids.size();i++)
+	{
+		dist =calc_dist(node->mid_C ,C[ids[i]].values);
+		cout<<dist<<' ';
+
+	 	if(dist < min_dist)
+		{
+			min_dist = dist;
+			min_id = ids[i];
+		}
+	}
+	
+	pruned_id.push_back(min_id);
+	
+	for(i=0;i<ids.size();i++)
+	{
+		if(ids[i]!=min_id)
+		{
+			if(! isFarther(node, C[ids[i]], C[min_id] ))
+			{
+				pruned_id.push_back(ids[i]);
+			}
+		}
+		
+	}
+	
+	for(i =0;i<pruned_id.size();i++)
+	{
+		cout<<pruned_id[i]<<' ';
+	}
+
+	
+
+	
+}	
 
 
 int main()
@@ -212,22 +308,30 @@ int main()
 	L[1] = 2;
 	
 	temp.values = L;
+	temp.cent_id = 0;
 	C.push_back(temp);
 		
 	L[0] = 4;
 	L[1] = 4;
 	
 	temp.values = L;
+	temp.cent_id = 1;
 	C.push_back(temp);
 
-	L[0] = 6;
+	L[0] = 16;
 	L[1] = 7;
 	
 	temp.values = L;
+	temp.cent_id = 2;
 	C.push_back(temp);
 	//done intialization
 
-//	prune(root, C);	
+	vector<int> ids;
+	ids.push_back(0);
+	ids.push_back(1);
+	ids.push_back(2);
+	
+	prune(root, C,ids);	
 	
 
 }
