@@ -1,5 +1,5 @@
 // K-means clustering algorithm. Implementaion using kd-tree
-//Author: Shailesh Tripathi
+// Author: Shailesh Tripathi
 
 #include<bits/stdc++.h>
 
@@ -14,6 +14,21 @@ double calc_dist(vector<double> A, vector<double> B)
 
 	res = sqrt(res);
 	return res;
+}
+
+//utility [A] = [A] + [B]
+void add_vec(vector<double> &A, vector<double> &B)
+{
+	if(A.size() != B.size())
+	{
+		cout<<"Invalid addition of vectors\n";
+		return ;
+	} 
+	for(int i=0;i<A.size();i++)
+	{
+		A[i]+=B[i];
+	}
+	return ;
 }
 
 class Point
@@ -93,17 +108,33 @@ class Centroid
 {
 	public:
 		vector<double> values;
-		double center_sum;
+		vector<double> center_sum;
 		int count;
 		int cent_id;
 		int dimension;
 	Centroid()
 	{
 //		values = C;
-		center_sum = 0;
+//		center_sum = 0;
 		count = 0;
 	}
-
+	
+	bool update()
+	{	
+		bool res =0;
+		if(count != 0)
+		{
+			for(int i=0 ; i<center_sum.size();i++)
+			{
+				if( values[i] != center_sum[i]/count)
+					res = 1;
+				values[i] = center_sum[i]/count;
+				center_sum[i] = 0;
+			}
+		count = 0;
+		}
+		return res;
+	}
 };
 
 void print(vector<Point> P, int total_attributes)
@@ -193,29 +224,28 @@ bool isFarther(Data_tree *root, Centroid z, Centroid z_star)
 	int i;
 	vector<double> corner_point(dim);
 	
+	//cout<<"corner ";
 	for(i=0;i<dim;i++)
 	{
 		if(z.values[i] > z_star.values[i] ) 
 			corner_point[i] = root->max_C[i];
 		else
 			corner_point[i] = root->min_C[i];
-	}
 	
+	//	cout<<corner_point[i] <<' '<<z_star.values[i]<<' '<< z.values[i]<<endl;
+	}
+	//cout<<endl;
+	
+	//cout<< calc_dist(corner_point,z.values) <<' '<< calc_dist(corner_point,z_star.values) << endl;	
 	return calc_dist(corner_point,z.values) > calc_dist(corner_point,z_star.values);
 
 }
 
 void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 {
-	if (root == NULL)
+	if (node == NULL)
 		return;
 	
-	//if node is a leaf
-	if(node->num_points == 1)
-	{
-		//add weights and centroid properties
-	
-	}
 	vector<int> pruned_id;
 	int i,j;
 
@@ -223,12 +253,12 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 	int min_id;
 	vector<double> corner(node->points.size());
 
-
+//	cout<<"dist=";
 	//find z*
 	for(i =0; i < ids.size();i++)
 	{
 		dist =calc_dist(node->mid_C ,C[ids[i]].values);
-		cout<<dist<<' ';
+//		cout<<dist<<' ';
 
 	 	if(dist < min_dist)
 		{
@@ -236,7 +266,17 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 			min_id = ids[i];
 		}
 	}
-	
+//	cout<<endl;
+
+	//if node is a leaf
+	if(node->num_points == 1)
+	{
+		//add weights and centroid properties
+		add_vec(C[min_id].center_sum, node->wgt_cent); 	//vector sum
+		C[min_id].count += node->num_points;
+		return;
+	}
+
 	pruned_id.push_back(min_id);
 	
 	for(i=0;i<ids.size();i++)
@@ -251,16 +291,49 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 		
 	}
 	
-	for(i =0;i<pruned_id.size();i++)
+//	for(i =0;i<pruned_id.size();i++)
+//	{
+//		cout<<pruned_id[i]<<' ';
+//	}
+//	cout<<endl;
+
+	//if only one centroid left
+	if(pruned_id.size() == 1)
 	{
-		cout<<pruned_id[i]<<' ';
+		//add weights and centroid properties
+		add_vec(C[min_id].center_sum, node->wgt_cent);	//vector sum
+		C[min_id].count += node->num_points;
 	}
+	else
+	{
+		prune(node->left , C, pruned_id);
+		prune(node->right, C, pruned_id);
+	} 
 
-	
-
-	
 }	
 
+//utility function to print centroids
+void print_centroid_details(vector<Centroid> &C)
+{
+	for(int i=0; i <C.size();i++)
+	{
+		cout<<C[i].cent_id << ' '<< C[i].count<<endl;
+		for(int j=0;j<C[i].center_sum.size();j++)
+			cout<<C[i].values[j]<<' ';
+		cout<<endl<<endl;
+	}
+}
+
+bool update_centroid(vector<Centroid> &C)
+{
+	int i;
+	bool res = 0;
+	for(i=0;i<C.size();i++)
+	{
+		res |= C[i].update();
+	}
+	return res;
+}
 
 int main()
 {
@@ -268,8 +341,9 @@ int main()
 		 total_attributes,  //dimension
 		 K,					//number of clusters
 		 max_iterations;	//maximum number of iterations
-
-	int i,j;
+	
+	bool is_change;
+	int i,j,iter;
 	double value;
 	Data_tree *root = NULL;
 
@@ -304,11 +378,13 @@ int main()
 	//using test centers
 	Centroid temp;
 	vector<double> L(2);
+	vector<double> zero_vec(2,0);
 	L[0] = 2;
 	L[1] = 2;
 	
 	temp.values = L;
 	temp.cent_id = 0;
+	temp.center_sum = zero_vec;
 	C.push_back(temp);
 		
 	L[0] = 4;
@@ -318,7 +394,7 @@ int main()
 	temp.cent_id = 1;
 	C.push_back(temp);
 
-	L[0] = 16;
+	L[0] = 6;
 	L[1] = 7;
 	
 	temp.values = L;
@@ -331,8 +407,15 @@ int main()
 	ids.push_back(1);
 	ids.push_back(2);
 	
-	prune(root, C,ids);	
+	iter = 0;
+	is_change = 1;
 	
-
+	while( (iter++ < max_iterations) && is_change)
+	{
+		prune(root, C,ids);	
+		is_change = update_centroid(C);
+		cout<<is_change<<endl;
+		cout<<"after\n";
+		print_centroid_details(C);
+	}
 }
-
