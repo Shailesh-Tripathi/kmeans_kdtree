@@ -5,6 +5,10 @@
 
 using namespace std;
 
+//global variables to keep track of the leaf nodes
+//Equally distributed leaf nodes will be selected as initial centroids
+int total_leafs; 
+
 //utility function to compute euclidean distance between two vectors
 double calc_dist(vector<double> A, vector<double> B)
 {
@@ -21,7 +25,7 @@ void add_vec(vector<double> &A, vector<double> &B)
 {
 	if(A.size() != B.size())
 	{
-		cout<<"Invalid addition of vectors\n";
+		cout<<A.size()<<' '<<B.size()<<"Invalid addition of vectors\n";
 		return ;
 	} 
 	for(int i=0;i<A.size();i++)
@@ -99,7 +103,14 @@ class Data_tree
 
 		void display()
 		{
-			cout<<"size="<<points.size()<<endl;
+			//cout<<"size="<<points.size()<<endl;
+			for(int j=0;j< points.size();j++)
+			{
+				for(int i=0;i < points[j].values.size();i++)
+					cout<<points[j].values[i]<<' ';
+				cout<<endl;
+			}
+
 		}
 
 };
@@ -118,7 +129,15 @@ class Centroid
 //		center_sum = 0;
 		count = 0;
 	}
-	
+
+	Centroid(int dim,int id)
+	{
+		dimension = dim;
+		cent_id = id;
+		count = 0;
+		values = vector<double>(dim,0);
+	}	
+
 	bool update()
 	{	
 		bool res =0;
@@ -148,7 +167,7 @@ void print(vector<Point> P, int total_attributes)
 	}
 }
 
-double find_median(vector<Point> P, int dim)
+double find_median(vector<Point> P, int dim, int &status)
 {
 	vector<double> M;
 	double median;
@@ -160,6 +179,11 @@ double find_median(vector<Point> P, int dim)
 	sort(M.begin(), M.end());
 	median = M[M.size()/2];
 
+	if( M[0] == M.back())
+		status = -1;
+	else
+		status = ((median == M[0]) ? 0:1); //0- left ; 1- right
+	
 	return median;
 }
 
@@ -167,54 +191,98 @@ void make_tree(Data_tree **node, vector<Point> P, int dim, int total_attributes)
 {
 	if(P.size() == 0)
 		return;	
-
+	int status;
 	//print(P,total_attributes);	
-	//cout<<P.size()<<' '<<dim<<'\n';
+	cout<<P.size()<<' '<<dim<<'\n';
 	*node = new Data_tree(P);
-	//(*node)->display();
+	(*node)->display();
 	if( P.size() == 1)
-		return;
-	double median = find_median(P, dim);
-	//cout<< "median = " << median<<endl;
-
-	vector<Point> L,R;
-	for(int i=0; i< P.size() ;i++)
 	{
-		if(P[i].values[dim] < median)
-			L.push_back(P[i]);
-		else
-			R.push_back(P[i]);
+		total_leafs++;
+		return;
+	}
+
+	int initial_dim = dim;
+	double median;
+	do{
+		median = find_median(P, dim,status);
+		dim = (dim+1)%total_attributes;
+	}while(status== -1 && dim!=initial_dim);
+	
+	if(dim == initial_dim)	//all the points in the node are same.
+							//Therefore we don't break it further.
+	{
+		total_leafs++;
+		return;
 	}
 	
+	//Get the dimension where we actuallly broke
+	dim = (dim + total_attributes - 1)% total_attributes;
+	
+	vector<Point> L,R;
+	if(status == 0 )
+	{
+		for(int i=0; i< P.size() ;i++)
+		{
+			if(P[i].values[dim] <= median)
+				L.push_back(P[i]);
+			else
+				R.push_back(P[i]);
+		}
+	}
+	else
+	{
+		for(int i=0; i< P.size() ;i++)
+		{
+			if(P[i].values[dim] < median)
+				L.push_back(P[i]);
+			else
+				R.push_back(P[i]);
+		}
+	}
+
 
 	make_tree(&((*node)->left), L, (dim+1)%total_attributes, total_attributes);
 	make_tree(&((*node)->right), R, (dim+1)%total_attributes, total_attributes);
 }
 
-void iterate_tree(Data_tree *node, int total_attributes)
+void iterate_tree(Data_tree *node, int total_attributes, int &skip, int &leaf_id, int &K, vector<Centroid> &C)
 {
 	if( node == NULL ) 
 	{
 		cout<<endl;
 		return;
 	}
-	cout<<"min-max-mid\n";	
-	for(int i=0;i<total_attributes;i++)
-	{
-		cout<<node->min_C[i] << ' '<<node->max_C[i]<<' '<<node->mid_C[i]<<endl;
-	}
-
-	cout<<"enter\n";
-	for(int i=0; i< node->points.size() ;i++)
-	{
-		for(int j=0; j <total_attributes; j++)
-			cout<< node->points[i].values[j]<<' ';
-		cout<<endl;
-	}
-	iterate_tree(node->left, total_attributes);
-	iterate_tree(node->right, total_attributes);
 	
-	cout<<"exit\n";
+	if(node->left == NULL && node->right == NULL) //leaf node 
+	{
+		leaf_id++;
+		cout<<leaf_id<<' '<<skip<<'\n';
+		if(leaf_id % skip ==0 && leaf_id/skip < K) 
+		{
+			cout<<leaf_id/skip<<' ';
+			Centroid temp(total_attributes, leaf_id/skip);
+			temp.values = node->mid_C;
+			C.push_back(temp);
+		}
+	}
+//	cout<<"min-max-mid\n";	
+//	for(int i=0;i<total_attributes;i++)
+//	{
+//		cout<<node->min_C[i] << ' '<<node->max_C[i]<<' '<<node->mid_C[i]<<endl;
+//	}
+//
+//	cout<<"enter\n";
+//	for(int i=0; i< node->points.size() ;i++)
+//	{
+//		for(int j=0; j <total_attributes; j++)
+//			cout<< node->points[i].values[j]<<' ';
+//		cout<<endl;
+//	}
+	iterate_tree(node->left, total_attributes,skip, leaf_id, K, C);
+	iterate_tree(node->right, total_attributes,skip, leaf_id, K, C);
+	
+//	cout<<"exit\n";
 }
 
 //returns true if z is farther than z* (z is a not potential center)
@@ -315,6 +383,7 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 //utility function to print centroids
 void print_centroid_details(vector<Centroid> &C)
 {
+	cout<<"Printing centroids "<<C.size()<<endl;
 	for(int i=0; i <C.size();i++)
 	{
 		cout<<C[i].cent_id << ' '<< C[i].count<<endl;
@@ -335,8 +404,15 @@ bool update_centroid(vector<Centroid> &C)
 	return res;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+
+	if(argc != 2)
+	{
+		cout<<"Invalid parameters!\n";
+		return 0;
+	}
+
 	int  total_points,		//total number of points
 		 total_attributes,  //dimension
 		 K,					//number of clusters
@@ -346,9 +422,11 @@ int main()
 	int i,j,iter;
 	double value;
 	Data_tree *root = NULL;
+	ifstream fin;
+	fin.open(argv[1]);
+	fin >> total_points >> total_attributes >> K >> max_iterations;
 
-	cin >> total_points >> total_attributes >> K >> max_iterations;
-
+	vector<Centroid> C;
 	vector<Point> P;
 	vector<double> values(total_attributes);
 
@@ -358,25 +436,33 @@ int main()
 
 		for(j = 0; j < total_attributes; j++)
 		{
-			cin >> values[j];
+			fin >> values[j];
 		}
 
 		Point p(i, values);
 		P.push_back(p);
 	}
 	
+	total_leafs = 0;
 	//build the data tree
 	make_tree(&root, P, 0, total_attributes);
+	cout<<"total leafs = "<<total_leafs;
+	int skip = total_leafs/K;
+	int leaf_id = -1;
 
-	//iterate over the tree and print it
-	iterate_tree(root, total_attributes);
-
+	//if K is less than leafs(less number of disctinct points than K
+	if( K < total_leafs)
+	{
+		K=total_leafs;
+	}
 	
-	//select random initial centroids
-	vector<Centroid> C;
+	//iterate over the tree and print it
+	iterate_tree(root, total_attributes,skip,leaf_id, K, C);
+
+	print_centroid_details(C);
 	
 	//using test centers
-	Centroid temp;
+	/*Centroid temp;
 	vector<double> L(2);
 	vector<double> zero_vec(2,0);
 	L[0] = 2;
@@ -401,12 +487,12 @@ int main()
 	temp.cent_id = 2;
 	C.push_back(temp);
 	//done intialization
+	*/
+	//initialize centroid ids
+	vector<int> ids(K);
+	for(i =0;i<K;i++)
+		ids[i]=i;
 
-	vector<int> ids;
-	ids.push_back(0);
-	ids.push_back(1);
-	ids.push_back(2);
-	
 	iter = 0;
 	is_change = 1;
 	
