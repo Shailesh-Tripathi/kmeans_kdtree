@@ -1,7 +1,13 @@
 // K-means clustering algorithm. Implementaion using kd-tree
 // Author: Shailesh Tripathi
 
-#include<bits/stdc++.h>
+#include<iostream>
+#include<vector>
+#include<float.h>
+#include<math.h>
+#include<algorithm>
+#include<fstream>
+#include<ctime>
 
 using namespace std;
 
@@ -449,13 +455,17 @@ int main(int argc, char* argv[])
 		Point p(i, values);
 		P.push_back(p);
 	}
-	
+
+	clock_t begin_time = clock();
 	total_leafs = 0;
 	//build the data tree
 	make_tree(&root, P, 0, total_attributes);
 	cout<<"total leafs = "<<total_leafs<<endl;
 	int skip = total_leafs/K;
 	int leaf_id = -1;
+
+	std::cout << "time to make tree "<< float( clock () - begin_time ) /  CLOCKS_PER_SEC << endl;
+	
 
 	//if K is less than leafs(less number of disctinct points than K
 	if( K > total_leafs)
@@ -501,15 +511,19 @@ int main(int argc, char* argv[])
 		ids[i]=i;
 	iter = 0;
 	is_change = 1;
-	
+
+	begin_time = clock();
+
 	while( (iter++ < max_iterations) && is_change)
 	{
 		cout<<"iteration  = "<<iter<<endl;
 		prune(root, C,ids);	
-		print_centroid_details(C);
+//		print_centroid_details(C);
 		is_change = update_centroid(C);
 //		cout<<is_change<<endl;
 		cout<<"after\n";
 	}
+	print_centroid_details(C);
 
+	std::cout << "time to make tree "<< float( clock () - begin_time ) /  CLOCKS_PER_SEC << endl;
 }
