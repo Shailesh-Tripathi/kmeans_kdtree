@@ -1,9 +1,21 @@
 // K-means clustering algorithm. Implementaion using kd-tree
 // Author: Shailesh Tripathi
 
-#include<bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <float.h>
+#include <math.h>
+#include <algorithm>
+#include <fstream>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/extrema.h>
 
 using namespace std;
+
+//global device variables
+double *d_C_x, *d_C_y;
+
 
 //global variables to keep track of the leaf nodes
 //Equally distributed leaf nodes will be selected as initial centroids
@@ -23,6 +35,14 @@ double calc_dist(vector<double> &A, vector<double> &B)
 
 	res = sqrt(res);
 	return res;
+}
+
+__device__
+double calc_dist_xy(double x1, double y1, double x2, double y2)
+{
+	double x = x1 - x2;
+	double y = y1 - y2;
+	return sqrt(x*x + y*y);
 }
 
 //utility [A] = [A] + [B]
@@ -186,7 +206,7 @@ double find_median(vector<Point> P, int dim, int &status)
 
 	if( M[0] == M.back())
 		status = -1;
-	else
+else
 		status = ((median == M[0]) ? 0:1); //0- left ; 1- right
 	
 	return median;
@@ -315,34 +335,90 @@ bool isFarther(Data_tree *root, Centroid z, Centroid z_star)
 
 }
 
+
+__device__
+//returns true if z is farther than z* (z is a not potential center)
+bool isFarther_vector(double* root_max_C, double* root_min_C , double z_x, double z_y, double z_star_x, double z_star_y)
+{
+	int dim =2;// root->points[0].dimension;
+	int i;
+	double corner_point_x, corner_point_y;
+	
+	//cout<<"corner ";
+//	for(i=0;i<dim;i++)
+		if(z_x > z_star_x ) 
+			corner_point_x = root_max_C[0];
+		else
+			corner_point_x = root_min_C[0];
+	
+	//	cout<<corner_point[i] <<' '<<z_star.values[i]<<' '<< z.values[i]<<endl;
+	//cout<<endl;
+		if(z_y > z_star_y ) 
+			corner_point_y = root_max_C[1];
+		else
+			corner_point_y = root_min_C[1];
+	
+	//	cout<<corner_point[i] <<' '<<z_star.values[i]<<' '<< z.values[i]<<endl;
+	
+	
+	//cout<< calc_dist(corner_point,z.values) <<' '<< calc_dist(corner_point,z_star.values) << endl;	
+	return  calc_dist_xy(corner_point_x, corner_point_y, z_x, z_y) > calc_dist_xy(corner_point_x, corner_point_y, z_star_x, z_star_y);
+
+}
+
+//CUDA kernel
+__global__ void select_possible_centroids(double* root_max_C, double* root_min_C, bool* d_temp_id, int* ids, int num_ids, double* d_C_x, double* d_C_y, int z_star)
+{
+	int t_id = blockIdx.x * blockDim.x + threadIdx.x;
+	if(t_id < num_ids && t_id!= z_star)
+	{
+		if(!isFarther_vector(root_max_C, root_min_C, d_C_x[ids[t_id]], d_C_y[ids[t_id]], d_C_x[ids[z_star]], d_C_y[ids[t_id]]))
+		{
+			d_temp_id[t_id]=1;		
+		}
+	}
+}
+
+
 void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 {
 	if (node == NULL)
 		return;
-	
+//cout<<"enter pruning\n";	
 	vector<int> pruned_id;
 	int i,j;
 
 	double dist,min_dist = DBL_MAX;
 	int min_id;
 	vector<double> corner(node->points.size());
-
-//	cout<<"dist=";
+	thrust::host_vector<double> h_Distance(ids.size());
+	
+	
+	//CUDA - implement on device
 	//find z*
 	for(i =0; i < ids.size();i++)
 	{
 //		cout<<"cal dist_sizes "<<node->mid_C.size() << ' ' <<ids[i]<< ' '<< C[ids[i]].values.size()<<endl;
-		dist =calc_dist(node->mid_C ,C[ids[i]].values);
+		h_Distance[i] =calc_dist(node->mid_C ,C[ids[i]].values);
+	}
 //		cout<<dist<<' ';
 
-	 	if(dist < min_dist)
+/*	 	if(dist < min_dist)
 		{
 			min_dist = dist;
 			min_id = ids[i];
 		}
-	}
+*/
+	
 //	cout<<endl;
 
+	//device
+	thrust::device_vector<double> d_Distance = h_Distance;
+    thrust::device_vector<double>::iterator iter = thrust::min_element(d_Distance.begin(), d_Distance.end());
+	
+	min_dist = *iter;
+	min_id = ids[iter-d_Distance.begin()];
+//cout<<"min_dist =" <<min_dist<<endl;	
 	//if node is a leaf
 	if(node->num_points == 1)
 	{
@@ -352,9 +428,43 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 		return;
 	}
 
-	pruned_id.push_back(min_id);
+//	pruned_id.push_back(min_id);
+
+	bool h_temp_id[ids.size()]={0};
+	h_temp_id[iter-d_Distance.begin()] = 1;
 	
-	for(i=0;i<ids.size();i++)
+	//device variables
+	int *d_ids;
+	bool *d_temp_id;
+	double *d_root_max_C, *d_root_min_C;
+	
+	//allocate device memory
+	cudaMalloc((void**)&d_ids, ids.size()*sizeof(int));
+	cudaMalloc((void**)&d_temp_id, ids.size());
+	cudaMalloc((void**)&d_root_max_C, node->max_C.size()*sizeof(double));
+	cudaMalloc((void**)&d_root_min_C, node->min_C.size()*sizeof(double));
+
+
+	//copy data to device
+	cudaMemcpy(d_ids,     &(ids.front()), ids.size()*sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_temp_id, h_temp_id, ids.size(), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_root_max_C, &(node->max_C.front()), node->max_C.size()*sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_root_min_C, &(node->min_C.front()), node->min_C.size()*sizeof(double), cudaMemcpyHostToDevice);
+
+	//assume there are just 2 dimensions
+	// data to be sent : node_min_C[dim], node_max_C[dim	
+	//CUDA - do this selection on device	
+	select_possible_centroids<<<1,ids.size()>>>(d_root_max_C, d_root_min_C, d_temp_id, d_ids, ids.size(), d_C_x, d_C_y, iter-d_Distance.begin());
+
+	cudaMemcpy(h_temp_id, d_temp_id, ids.size(), cudaMemcpyDeviceToHost);
+
+	for(i=0; i<ids.size();i++)
+	{
+//		cout<<i<<' '<<h_temp_id[i]<<endl;
+		if(h_temp_id[i]==1)
+			pruned_id.push_back(ids[i]);
+	}
+/*	for(i=0;i<ids.size();i++)
 	{
 		if(ids[i]!=min_id)
 		{
@@ -365,13 +475,12 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 		}
 		
 	}
+*/	
 	
-//	for(i =0;i<pruned_id.size();i++)
-//	{
-//		cout<<pruned_id[i]<<' ';
-//	}
-//	cout<<endl;
-
+	cudaFree(d_ids);
+	cudaFree(d_temp_id);
+	cudaFree(d_root_max_C);
+	cudaFree(d_root_min_C);
 	//if only one centroid left
 	if(pruned_id.size() == 1)
 	{
@@ -501,15 +610,28 @@ int main(int argc, char* argv[])
 		ids[i]=i;
 	iter = 0;
 	is_change = 1;
-	
+
+//	thrust::device_vector<Centroid> d_C = C;
+	double *h_C_x = new double[K];
+	double *h_C_y = new double[K];
+	cudaMalloc((void**)&d_C_x, K*sizeof(double));
+	cudaMalloc((void**)&d_C_y, K*sizeof(double));
+
+	clock_t begin_time = clock();
 	while( (iter++ < max_iterations) && is_change)
 	{
 		cout<<"iteration  = "<<iter<<endl;
+		cudaMemcpy(d_C_x, h_C_x, K*sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_C_y, h_C_y, K*sizeof(double), cudaMemcpyHostToDevice);
+
+		//CUDA - copy centroid data to device
 		prune(root, C,ids);	
-		print_centroid_details(C);
+//		print_centroid_details(C);
 		is_change = update_centroid(C);
 //		cout<<is_change<<endl;
 		cout<<"after\n";
 	}
 
+		print_centroid_details(C);
+	std::cout << "time to make tree "<< float( clock () - begin_time ) /  CLOCKS_PER_SEC << endl;
 }
