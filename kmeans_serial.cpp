@@ -10,8 +10,13 @@ using namespace std;
 int total_leafs; 
 
 //utility function to compute euclidean distance between two vectors
-double calc_dist(vector<double> A, vector<double> B)
+double calc_dist(vector<double> &A, vector<double> &B)
 {
+	if(A.size() != B.size())
+	{
+		cout<<A.size()<<' '<<B.size()<<"Invalid calculation of distance vectors\n";
+		return 0;
+	} 
 	double res = 0;
 	for(int i=0;i<A.size();i++)
 		res += ((A[i]-B[i]) * (A[i]-B[i]));
@@ -135,7 +140,7 @@ class Centroid
 		dimension = dim;
 		cent_id = id;
 		count = 0;
-		values = vector<double>(dim,0);
+		center_sum = vector<double>(dim,0);
 	}	
 
 	bool update()
@@ -193,9 +198,9 @@ void make_tree(Data_tree **node, vector<Point> P, int dim, int total_attributes)
 		return;	
 	int status;
 	//print(P,total_attributes);	
-	cout<<P.size()<<' '<<dim<<'\n';
+	cout<<"points size = "<<P.size()<<' '<<dim<<'\n';
 	*node = new Data_tree(P);
-	(*node)->display();
+//	(*node)->display();
 	if( P.size() == 1)
 	{
 		total_leafs++;
@@ -250,19 +255,20 @@ void iterate_tree(Data_tree *node, int total_attributes, int &skip, int &leaf_id
 {
 	if( node == NULL ) 
 	{
-		cout<<endl;
+//		cout<<endl;
 		return;
 	}
 	
 	if(node->left == NULL && node->right == NULL) //leaf node 
 	{
 		leaf_id++;
-		cout<<leaf_id<<' '<<skip<<'\n';
+//		cout<<leaf_id<<' '<<skip<<'\n';
 		if(leaf_id % skip ==0 && leaf_id/skip < K) 
 		{
-			cout<<leaf_id/skip<<' ';
+//			cout<<leaf_id/skip<<' ';
 			Centroid temp(total_attributes, leaf_id/skip);
 			temp.values = node->mid_C;
+//			cout<<"values size = "<<temp.values.size()<<endl;
 			C.push_back(temp);
 		}
 	}
@@ -325,6 +331,7 @@ void prune(Data_tree *node,vector<Centroid>& C, vector<int> ids)
 	//find z*
 	for(i =0; i < ids.size();i++)
 	{
+//		cout<<"cal dist_sizes "<<node->mid_C.size() << ' ' <<ids[i]<< ' '<< C[ids[i]].values.size()<<endl;
 		dist =calc_dist(node->mid_C ,C[ids[i]].values);
 //		cout<<dist<<' ';
 
@@ -386,7 +393,7 @@ void print_centroid_details(vector<Centroid> &C)
 	cout<<"Printing centroids "<<C.size()<<endl;
 	for(int i=0; i <C.size();i++)
 	{
-		cout<<C[i].cent_id << ' '<< C[i].count<<endl;
+		cout<<C[i].cent_id << ' '<< C[i].count<<' '<<C[i].values.size()<<endl;
 		for(int j=0;j<C[i].center_sum.size();j++)
 			cout<<C[i].values[j]<<' ';
 		cout<<endl<<endl;
@@ -446,12 +453,12 @@ int main(int argc, char* argv[])
 	total_leafs = 0;
 	//build the data tree
 	make_tree(&root, P, 0, total_attributes);
-	cout<<"total leafs = "<<total_leafs;
+	cout<<"total leafs = "<<total_leafs<<endl;
 	int skip = total_leafs/K;
 	int leaf_id = -1;
 
 	//if K is less than leafs(less number of disctinct points than K
-	if( K < total_leafs)
+	if( K > total_leafs)
 	{
 		K=total_leafs;
 	}
@@ -459,7 +466,7 @@ int main(int argc, char* argv[])
 	//iterate over the tree and print it
 	iterate_tree(root, total_attributes,skip,leaf_id, K, C);
 
-	print_centroid_details(C);
+//	print_centroid_details(C);
 	
 	//using test centers
 	/*Centroid temp;
@@ -492,16 +499,17 @@ int main(int argc, char* argv[])
 	vector<int> ids(K);
 	for(i =0;i<K;i++)
 		ids[i]=i;
-
 	iter = 0;
 	is_change = 1;
 	
 	while( (iter++ < max_iterations) && is_change)
 	{
+		cout<<"iteration  = "<<iter<<endl;
 		prune(root, C,ids);	
-		is_change = update_centroid(C);
-		cout<<is_change<<endl;
-		cout<<"after\n";
 		print_centroid_details(C);
+		is_change = update_centroid(C);
+//		cout<<is_change<<endl;
+		cout<<"after\n";
 	}
+
 }
